@@ -43,7 +43,9 @@ export function seedState() {
 function addActivity(message, type = 'system') { state.activities.unshift({ id: uid('act'), type, message, date: now() }); state.activities = state.activities.slice(0, 80); }
 function addTransaction(tx) { state.transactions.unshift(tx); state.transactions = state.transactions.slice(0, 500); }
 function activeBranches() { return state.branches.filter(item => item.status === 'active'); }
-function persist() { return saveState(state); }
+const changeListeners = new Set();
+export function onChange(fn) { changeListeners.add(fn); return () => changeListeners.delete(fn); }
+function persist(silent = false) { return saveState(state).then(result => { if (!silent) changeListeners.forEach(fn => { try { fn(); } catch { /* listener errors must never block saving */ } }); return result; }); }
 function assertAmount(amountCents) { if (!Number.isInteger(amountCents) || amountCents <= 0) throw new Error('Enter an amount greater than zero.'); }
 async function commit(mutator) {
   if (busy) throw new Error('Another ledger update is being processed.');
@@ -55,6 +57,13 @@ async function commit(mutator) {
 function isLegacySample(saved) { return !!saved && (saved.demoData === true || (Array.isArray(saved.transactions) && saved.transactions.some(tx => tx && tx.demo === true))); }
 export async function init() { state = await loadState(); if (!state || !state.version || isLegacySample(state)) { state = seedState(); await clearState(); await persist(); } delete state.demoData; return state; }
 export function getState() { return state; }
+// Replaces the ledger with a copy pulled from the cloud. Mutates in place so existing references stay valid.
+export async function applyRemote(next) {
+  if (busy) throw new Error('Another ledger update is being processed.');
+  busy = true;
+  try { Object.keys(state).forEach(key => delete state[key]); Object.assign(state, next); await persist(true); } finally { busy = false; }
+  return state;
+}
 export async function resetLedger() { state = seedState(); await clearState(); await persist(); return state; }
 export function findBranch(id) { return state.branches.find(item => item.id === id); }
 export function accountName(id) { if (id === 'wallet' || id === 'Main Wallet') return 'Main Wallet'; if (id === 'external' || id === 'External') return 'External'; return findBranch(id)?.name || id || '—'; }

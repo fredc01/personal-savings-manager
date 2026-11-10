@@ -1,14 +1,16 @@
 # Deploying Personal Savings Manager
 
-This guide covers three things:
+This guide covers:
 
 1. Running and testing the app locally
 2. Publishing the web app to **GitHub Pages**
 3. Building the **Android app (APK)**, locally or automatically with GitHub Actions
+4. Starting with real data
+5. **Cloud sync with Supabase** (optional): sync across devices while staying offline-first
 
 The app is a static site (HTML, CSS and JavaScript modules). There is no backend. All data is stored in the browser's IndexedDB on each device.
 
-> **Important:** because data lives in the browser, each device and browser has its own separate ledger. Use **Settings & Backup → Download backup** regularly. Clearing browser data or uninstalling the app erases the ledger.
+> **Important:** by default, data lives in the browser, so each device and browser has its own separate ledger. Use **Settings & Backup → Download backup** regularly. Clearing browser data or uninstalling the app erases the ledger. To keep one ledger across devices, set up the optional [cloud sync](#5-cloud-sync-with-supabase-optional).
 
 ---
 
@@ -145,12 +147,87 @@ If your browser still holds the older sample ledger from a previous version, it 
 
 ---
 
+## 5. Cloud sync with Supabase (optional)
+
+The app stays **offline-first**. Every entry is saved on your device immediately, with or without internet. If you connect a Supabase database, the app also keeps a copy of your ledger there and syncs it **automatically whenever you are online**. There is also a manual sync button.
+
+### 5.1 Set up Supabase (about 5 minutes, free tier is enough)
+
+1. Create an account and a **new project** at <https://supabase.com>. Pick any name and region, and save the database password.
+2. Open **SQL Editor → New query**, paste the contents of [`supabase/schema.sql`](supabase/schema.sql), and click **Run**. This creates one private table, `ledgers`, protected by Row Level Security so each login can only read and write its own row.
+3. Open **Authentication → Providers → Email**:
+   - For a personal app, you can turn **Confirm email** off so your account works immediately. If you leave it on, you must click the link in the confirmation email before signing in.
+4. Find your connection details in **Project Settings → API** (or the **Connect** button):
+   - **Project URL**, like `https://abcd1234.supabase.co`
+   - **anon / publishable key** (the public one)
+
+> **Never use the `service_role` or `secret` key.** It bypasses all security. The app rejects it if you paste it by mistake. The anon/publishable key is designed to be public, and Row Level Security protects your data.
+
+### 5.2 Connect the app
+
+1. Open the app → **Settings & backup → Cloud sync**.
+2. Paste the **Project URL** and **anon key** under *Supabase connection*.
+3. Enter an email and password, then click **Create account** (first time) or **Sign in**.
+
+Repeat on each device or browser where you want the same ledger. Sign in with the **same account**.
+
+**Optional shortcut:** put the URL and anon key into `js/config.js`, commit and push. Every device then has them pre-filled, and you only need to sign in.
+
+```js
+export const SUPABASE_URL = 'https://abcd1234.supabase.co';
+export const SUPABASE_ANON_KEY = 'your-public-anon-key';
+```
+
+Once you have created your own account, you can stop strangers from creating accounts on your project: **Authentication → Sign In / Providers → turn off "Allow new users to sign up"**.
+
+### 5.3 How syncing works
+
+| When | What happens |
+| --- | --- |
+| You add or change something | Saved on the device immediately. About 2.5 seconds later, if online, it is uploaded. |
+| You open the app, return to the tab, or regain internet | The app checks the cloud and syncs. |
+| App stays open | It re-checks every 2 minutes. |
+| You tap the sync icon (top bar) or **Sync now** | Immediate sync with a result message. |
+| You are offline | Nothing is lost. The status shows "Offline", and the changes upload when you are back online. |
+
+The cloud icon in the top bar shows the state: green dot = up to date, amber = waiting or syncing, grey = offline, red = problem or needs a decision.
+
+**What is synced:** balances, transactions, branches, goals, presets, planner and activity log. **Not synced:** color mode and balance privacy, which stay per device.
+
+**Conflicts.** The cloud keeps a single copy of the ledger with a revision number. If you change data on two devices before they sync, the app does **not** guess or merge. It shows both totals and asks you to choose **Keep this device**, **Use cloud copy**, or **Decide later**. There is a button to download a backup of the device first. To avoid conflicts, let one device finish syncing (green dot) before editing on another.
+
+**Setting up a second device.** Sign in on the new, empty device and it downloads your ledger automatically, with no prompt. If the new device already has entries of its own and the cloud also has data, you are asked which to keep.
+
+### 5.4 Things to know
+
+- **Erase all data** and **Restore backup** are changes like any other. With sync on, they replace the cloud copy on the next sync. The confirmation message says so.
+- Signing out stops syncing but keeps all data on the device. The cloud copy stays in Supabase until you delete it there (**Table Editor → ledgers**).
+- Your ledger is stored as JSON in your own Supabase project. You can read it in the dashboard, and Supabase staff can technically access project data. Do not use sync if that is a concern. The app works fully without it.
+- Free Supabase projects are **paused after about a week of inactivity**. Your data is kept, and you can restore the project from the dashboard. Local data on your devices is unaffected.
+- Keep downloading JSON backups. Sync is a convenience copy, not a replacement for backups.
+
+### Troubleshooting sync
+
+| Problem | Fix |
+| --- | --- |
+| "Could not reach Supabase" | Check the Project URL (must start with `https://` and end with `.supabase.co`) and your internet connection. If the project is paused, restore it in the Supabase dashboard. |
+| "Invalid login credentials" | Wrong email or password, or the account is not confirmed yet. Check your email for the confirmation link. |
+| "Email not confirmed" | Click the link in the confirmation email, or turn off **Confirm email** (step 5.1.3). |
+| "Signups not allowed" | You turned off sign-ups before creating your account. Re-enable it, create the account, then turn it off again. |
+| Red dot with "relation ... does not exist" or "permission denied" | `supabase/schema.sql` was not run, or failed partway. Run it again in the SQL Editor. |
+| "Session expired" | Sign in again. Your local data is untouched. |
+| Changes not appearing on another device | Wait for the green dot on the first device, then tap **Sync now** on the second one. |
+
+---
+
 ## Project layout
 
 | Path | Purpose |
 | --- | --- |
 | `index.html`, `css/`, `js/` | The web app |
 | `sw.js`, `manifest.json`, `icon.svg` | Offline support and install metadata |
+| `js/sync.js`, `js/config.js` | Optional Supabase cloud sync and its default settings |
+| `supabase/schema.sql` | Database table and security rules for cloud sync |
 | `server.js` | Local dev server (`npm start`) |
 | `scripts/build-web.mjs` | Builds the `dist/` folder for Pages (`npm run build`) |
 | `app/` | Capacitor Android wrapper |

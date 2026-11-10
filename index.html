@@ -27,14 +27,14 @@
       <div class="sidebar-bottom">
         <a href="#/reports" data-route="/reports" class="nav-item"><span class="nav-icon" data-icon="chart"></span><span>Reports & analytics</span></a>
         <a href="#/settings" data-route="/settings" class="nav-item"><span class="nav-icon" data-icon="settings"></span><span>Settings & backup</span></a>
-        <div class="sidebar-note"><span class="status-dot"></span><span><strong>Local ledger</strong><small>Saved on this device</small></span></div>
+        <div class="sidebar-note"><span class="status-dot"></span><span><strong>Local ledger</strong><small id="sidebar-sync-note">Saved on this device</small></span></div>
       </div>
     </aside>
     <div class="main-area">
       <header class="topbar">
         <div class="mobile-brand"><button class="icon-button" data-action="toggle-sidebar" aria-label="Open menu"><span data-icon="menu"></span></button><span class="brand-mark">S<span></span></span><strong>Savings</strong></div>
         <div class="breadcrumb"><span id="page-eyebrow">Overview</span><span class="breadcrumb-slash">/</span><strong id="page-title">Dashboard</strong></div>
-        <div class="topbar-actions"><button class="icon-button" data-action="toggle-theme" aria-label="Toggle theme"><span data-icon="moon"></span></button><button class="avatar" data-action="open-profile" aria-label="Open profile">JD</button></div>
+        <div class="topbar-actions"><button class="icon-button sync-button" id="sync-button" data-state="off" data-action="sync-now" aria-label="Sync data" title="Cloud sync"><span data-icon="sync"></span></button><button class="icon-button" data-action="toggle-theme" aria-label="Toggle theme"><span data-icon="moon"></span></button><button class="avatar" data-action="open-profile" aria-label="Open profile">JD</button></div>
       </header>
       <main id="content" tabindex="-1"></main>
       <nav class="mobile-nav" aria-label="Mobile navigation">

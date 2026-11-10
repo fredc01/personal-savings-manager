@@ -29,6 +29,10 @@ For iterative development, run `npm run cap:sync` after changing the root web fi
 
 The browser release includes the dashboard, wallet, branch CRUD/archive/reactivation, automatic/manual deposits with centavo rounding, transfers, withdrawals, goals, allocation presets, planner reminders, searchable/filterable transaction history with date range, CSV export, reports, theme/privacy controls, JSON backup/restore validation, and audit activity. Financial operations are serialized through `js/finance.js` and stored through `js/db.js`.
 
+## Cloud sync (optional)
+
+The app is offline-first. Connect your own Supabase project under Settings & backup → Cloud sync to sync automatically across devices whenever you are online. Setup is in [DEPLOY.md](DEPLOY.md#5-cloud-sync-with-supabase-optional).
+
 ## Deploy
 
 See [DEPLOY.md](DEPLOY.md) for publishing to GitHub Pages and building the Android APK.
