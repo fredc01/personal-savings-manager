@@ -42,3 +42,47 @@ export function mergeLedgers(base, local, remote) {
     plans: mergeById(base.plans, local.plans, remote.plans, (b, l, r) => mergeRecord(b, l, r))
   };
 }
+
+// ---------- Combining when there is no saved base ----------
+// Used when the person asks for "Combine both" and this device has no record of its last sync.
+// The cloud copy is the starting point; the transactions that exist only on this device are added to it
+// and their effect on each balance is applied. Throws if the effect of a transaction cannot be worked out.
+const WALLET = 'Main Wallet';
+function effectsOf(tx) {
+  const a = tx.amountCents;
+  switch (tx.type) {
+    case 'deposit': return tx.destination === WALLET ? [[WALLET, a]] : []; // a distributed deposit is carried by its distribution legs
+    case 'automatic_distribution': return [[tx.destination, a]];
+    case 'transfer': return [[tx.source, -a], [tx.destination, a]];
+    case 'withdrawal': return [[tx.source, -a]];
+    case 'deposit_reversal': return [[WALLET, -a]];
+    default: throw new Error(`unknown transaction type "${tx.type}"`);
+  }
+}
+const unionById = (first, second) => { const seen = new Set(first.map(item => item.id)); return [...first, ...second.filter(item => !seen.has(item.id))]; };
+
+export function combineByTransactions(local, remote) {
+  const remoteIds = new Set(remote.transactions.map(tx => tx.id));
+  const remoteReversed = new Set(remote.transactions.filter(tx => tx.type === 'deposit_reversal').map(tx => tx.reverses));
+  // A deposit reversed on both devices must only be taken off once.
+  const localOnly = local.transactions.filter(tx => !remoteIds.has(tx.id) && !(tx.type === 'deposit_reversal' && remoteReversed.has(tx.reverses)));
+  const localById = new Map(local.transactions.map(tx => [tx.id, tx]));
+
+  const branches = remote.branches.map(item => ({ ...item }));
+  const known = new Set(branches.map(item => item.id));
+  local.branches.filter(item => !known.has(item.id)).forEach(item => branches.push({ ...item, balanceCents: 0 }));
+  const wallet = { ...remote.wallet };
+  const accountNamed = name => { const found = branches.filter(item => item.name === name); if (found.length !== 1) throw new Error(`cannot find the account "${name}" on both devices`); return found[0]; };
+  localOnly.forEach(tx => effectsOf(tx).forEach(([name, delta]) => { if (name === WALLET) wallet.balanceCents += delta; else accountNamed(name).balanceCents += delta; }));
+
+  const remoteTransactions = remote.transactions.map(tx => { const mine = localById.get(tx.id); return mine && mine.status !== 'completed' && tx.status === 'completed' ? { ...tx, status: mine.status } : tx; });
+  return {
+    version: 1,
+    wallet,
+    branches,
+    transactions: [...remoteTransactions, ...localOnly].sort(byDateDesc).slice(0, 500),
+    activities: unionById(remote.activities, local.activities).sort(byDateDesc).slice(0, 80),
+    presets: unionById(remote.presets, local.presets),
+    plans: unionById(remote.plans, local.plans)
+  };
+}

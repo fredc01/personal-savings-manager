@@ -95,7 +95,7 @@ function summarizeLedger(ledger) {
 function askConflict({ local, remote }) {
   return new Promise(resolve => {
     pendingChoice = resolve;
-    openModal({ title: 'Which copy should win?', eyebrow: 'Sync conflict', body: `<div class="confirm-summary"><p>This device and your cloud copy both have different changes. Nothing has been overwritten yet.</p><div class="summary-line"><span>This device</span><span>${summarizeLedger(local)}</span></div><div class="summary-line"><span>Cloud copy</span><span>${summarizeLedger(remote)}</span></div><p><button type="button" class="text-button" data-action="export-backup">${icon('download', 14)} Download a backup of this device first</button></p></div><div class="modal-actions modal-actions-stack"><button type="button" class="button button-primary" data-action="choice-local">Keep this device (replace cloud)</button><button type="button" class="button button-secondary" data-action="choice-remote">Use cloud copy (replace this device)</button><button type="button" class="button button-ghost" data-action="choice-later">Decide later</button></div>` });
+    openModal({ title: 'Which copy should win?', eyebrow: 'Sync conflict', body: `<div class="confirm-summary"><p>This device and your cloud copy both have different changes. Nothing has been overwritten yet. "Combine both" keeps every transaction from both and adds the balances together.</p><div class="summary-line"><span>This device</span><span>${summarizeLedger(local)}</span></div><div class="summary-line"><span>Cloud copy</span><span>${summarizeLedger(remote)}</span></div><p><button type="button" class="text-button" data-action="export-backup">${icon('download', 14)} Download a backup of this device first</button></p></div><div class="modal-actions modal-actions-stack"><button type="button" class="button button-primary" data-action="choice-combine">Combine both (add them together)</button><button type="button" class="button button-secondary" data-action="choice-local">Keep this device (replace cloud)</button><button type="button" class="button button-secondary" data-action="choice-remote">Use cloud copy (replace this device)</button><button type="button" class="button button-ghost" data-action="choice-later">Decide later</button></div>` });
   });
 }
 function refreshAfterRemote() {
@@ -254,7 +254,7 @@ function validateBackupState(candidate) {
 async function handleAction(action, target) {
   try {
     if (action === 'close-modal') { const resolve = pendingConfirm; pendingConfirm = null; const choice = pendingChoice; pendingChoice = null; closeModal(); resolve?.(false); choice?.(null); return; }
-    if (action === 'choice-local' || action === 'choice-remote' || action === 'choice-later') { const choice = pendingChoice; pendingChoice = null; closeModal(); choice?.(action === 'choice-local' ? 'local' : action === 'choice-remote' ? 'remote' : null); return; }
+    if (action === 'choice-combine' || action === 'choice-local' || action === 'choice-remote' || action === 'choice-later') { const choice = pendingChoice; pendingChoice = null; closeModal(); choice?.(action === 'choice-combine' ? 'combine' : action === 'choice-local' ? 'local' : action === 'choice-remote' ? 'remote' : null); return; }
     if (action === 'sync-now') {
       if (!Sync.isSignedIn()) { toast('Sign in to cloud sync in Settings first.', 'info'); return go('/settings'); }
       if (!navigator.onLine) return toast('You are offline. Your data is saved on this device and will sync later.', 'info');

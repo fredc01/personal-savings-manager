@@ -2,7 +2,7 @@
 // The local ledger (IndexedDB) is always the working copy. The cloud holds one snapshot per user.
 // Changes are never merged silently: if both sides changed, the person chooses which copy wins.
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
-import { mergeLedgers } from './merge.js';
+import { mergeLedgers, combineByTransactions } from './merge.js';
 
 const META_KEY = 'savings-manager-sync';
 const BASE_KEY = 'savings-manager-sync-base';
@@ -94,7 +94,7 @@ export async function signIn({ url, anonKey, email, password }) {
   // A fresh sign-in forgets the old sync baseline. Otherwise an empty ledger (e.g. after "Erase all data" while
   // signed out) looks like a deliberate edit and silently overwrites the cloud copy. With no baseline, an empty
   // device pulls the cloud copy, and a device with different data asks which copy to keep.
-  Object.assign(meta, { baseRevision: null, syncedFp: null }); clearBase();
+  Object.assign(meta, { baseRevision: null, syncedFp: null });
   adoptSession(data, email.trim()); idleStatus(); schedule(300); return true;
 }
 export async function signUp({ url, anonKey, email, password }) {
@@ -107,7 +107,7 @@ export async function signUp({ url, anonKey, email, password }) {
 export async function signOut() {
   // Push any unsynced changes first so nothing is lost when the person signs out and later erases the device.
   try { if (isSignedIn() && api && !running && !conflictPending && navigator.onLine && fingerprint(api.getState()) !== meta.syncedFp) await syncNow(); } catch { /* sign out anyway */ }
-  Object.assign(meta, { accessToken: null, refreshToken: null, expiresAt: 0, sessionExpired: false }); saveMeta(); clearBase(); clearTimeout(timer); idleStatus();
+  Object.assign(meta, { accessToken: null, refreshToken: null, expiresAt: 0, sessionExpired: false }); saveMeta(); clearTimeout(timer); idleStatus();
 }
 export function setAutoSync(on) { meta.autoSync = !!on; saveMeta(); if (on) schedule(300); else idleStatus(); }
 async function ensureToken() {
@@ -154,7 +154,10 @@ async function autoMerge(remote) {
   let current = remote;
   for (let attempt = 0; attempt < 3 && current; attempt += 1) {
     const local = api.getState(); const fpBefore = fingerprint(local);
-    if (isPristine(local) && !isPristine(base)) return null; // the ledger was erased on purpose; do not guess
+    // If this device lost every transaction it had at the last sync, the ledger was erased on purpose; do not guess.
+    const have = new Set(local.transactions.map(tx => tx.id));
+    if (isPristine(local) && !isPristine(base)) return null;
+    if (base.transactions.length && !base.transactions.some(tx => have.has(tx.id))) return null;
     const start = JSON.parse(JSON.stringify(corePayload(local)));
     let merged;
     try { merged = { ...mergeLedgers(base, start, current.data), settings: local.settings }; api.validate(merged); } catch { return null; }
@@ -168,6 +171,16 @@ async function autoMerge(remote) {
     api.onRemoteApplied?.();
     return { merged: true };
   }
+  return null;
+}
+
+// No saved base, but one side clearly contains everything the other has (same transaction ids plus more):
+// the bigger one is simply newer, so use it. Returns null when both sides have something the other lacks.
+async function resolveBySuperset(local, remote) {
+  const mine = new Set(local.transactions.map(tx => tx.id)); const theirs = new Set(remote.data.transactions.map(tx => tx.id));
+  const mineHasAll = [...theirs].every(id => mine.has(id)); const theirsHasAll = [...mine].every(id => theirs.has(id));
+  if (mineHasAll && mine.size > theirs.size) return pushLocal(remote.revision);
+  if (theirsHasAll && theirs.size > mine.size) return pullRemote(remote);
   return null;
 }
 
@@ -187,12 +200,19 @@ export async function syncNow({ manual = false } = {}) {
     else if (meta.baseRevision === remote.revision) { result = dirty ? await pushLocal(remote.revision) : { upToDate: true }; if (result.upToDate && !loadBase()) saveBase(local); }
     else if (fingerprint(remote.data) === fp) { Object.assign(meta, { baseRevision: remote.revision, syncedFp: fp, lastSyncAt: new Date().toISOString() }); saveMeta(); saveBase(local); result = { upToDate: true }; }
     else if (isPristine(local) || (meta.baseRevision !== null && !dirty)) { result = await pullRemote(remote); }
-    else { result = (await autoMerge(remote)) || { conflict: true, remote }; }
+    else { result = (await autoMerge(remote)) || (await resolveBySuperset(local, remote)) || { conflict: true, remote }; }
     if (result.conflict) {
       const latest = result.remote || await fetchRemote();
       conflictPending = true; setStatus('conflict', 'This device and the cloud both have changes. Choose which to keep.');
       const choice = await api.askConflict({ local: api.getState(), remote: latest?.data });
       if (choice === 'local') { const outcome = await pushLocal(latest ? latest.revision : null); if (outcome.conflict) throw new Error('The cloud copy changed again. Tap Sync now to retry.'); conflictPending = false; result = outcome; }
+      else if (choice === 'combine' && latest) {
+        const mine = api.getState(); const fpMine = fingerprint(mine); let merged;
+        try { merged = { ...combineByTransactions(corePayload(mine), latest.data), settings: mine.settings }; api.validate(merged); } catch (error) { throw new Error(`Could not combine automatically (${error.message}). Choose one copy instead, after downloading a backup.`); }
+        if (fingerprint(api.getState()) !== fpMine) throw new Error('Something changed while combining. Tap Sync now to retry.');
+        const outcome = await pushLocal(latest.revision, merged); if (outcome.conflict) throw new Error('The cloud copy changed again. Tap Sync now to retry.');
+        await api.applyRemote(merged); api.onRemoteApplied?.(); conflictPending = false; result = { merged: true };
+      }
       else if (choice === 'remote' && latest) { await pullRemote(latest); conflictPending = false; result = { pulled: true }; }
       else { idleStatus(); setStatus('conflict', 'Sync paused. Tap Sync now to choose which copy to keep.'); return { conflict: true }; }
     }
