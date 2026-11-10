@@ -328,6 +328,23 @@ document.addEventListener('submit', async event => {
   } catch (error) { toast(error.message || 'Please review this form.', 'error'); }
 });
 
-async function init() { state = await Finance.init(); Sync.subscribe(paintSync); Finance.onChange(Sync.notifyChanged); Sync.init({ getState: Finance.getState, applyRemote: Finance.applyRemote, validate: validateBackupState, onRemoteApplied: refreshAfterRemote, askConflict }); document.querySelectorAll('[data-icon]').forEach(item => item.innerHTML = icon(item.dataset.icon)); handleHash(); paintSync(Sync.getStatus()); const appPlugin = window.Capacitor?.Plugins?.App; appPlugin?.addListener?.('backButton', async ({ canGoBack }) => { if (location.hash && location.hash !== '#/') history.back(); else if (!canGoBack) await appPlugin.exitApp?.(); }); }
+// Supabase sends people back here after they click the confirmation email, with the result in the URL hash
+// (#access_token=...&type=signup on success, #error=...&error_description=... on failure).
+// Read it, tell the person what happened, and clean the address so the router is not confused.
+function handleAuthRedirect() {
+  const raw = location.hash.replace(/^#/, '');
+  if (!raw || raw.startsWith('/') || !raw.includes('=')) return;
+  const params = new URLSearchParams(raw);
+  const failure = params.get('error_description') || params.get('error');
+  const success = params.get('type') === 'signup' || params.get('type') === 'email_change' || params.has('access_token');
+  if (!failure && !success) return;
+  history.replaceState(null, '', `${location.pathname}${location.search}#/settings`);
+  setTimeout(() => {
+    if (failure) toast(`${failure.replace(/\+/g, ' ')}. Request a new confirmation email by creating the account again, or check Supabase -> Authentication -> Users.`, 'error');
+    else toast('Email confirmed. You can sign in now.', 'success');
+  }, 400);
+}
+
+async function init() { handleAuthRedirect(); state = await Finance.init(); Sync.subscribe(paintSync); Finance.onChange(Sync.notifyChanged); Sync.init({ getState: Finance.getState, applyRemote: Finance.applyRemote, validate: validateBackupState, onRemoteApplied: refreshAfterRemote, askConflict }); document.querySelectorAll('[data-icon]').forEach(item => item.innerHTML = icon(item.dataset.icon)); handleHash(); paintSync(Sync.getStatus()); const appPlugin = window.Capacitor?.Plugins?.App; appPlugin?.addListener?.('backButton', async ({ canGoBack }) => { if (location.hash && location.hash !== '#/') history.back(); else if (!canGoBack) await appPlugin.exitApp?.(); }); }
 window.addEventListener('hashchange', handleHash);
 init();

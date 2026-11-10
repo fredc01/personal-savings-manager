@@ -70,17 +70,25 @@ function adoptSession(data, email) {
   Object.assign(meta, { accessToken: data.access_token, refreshToken: data.refresh_token, expiresAt: Date.now() + (data.expires_in || 3600) * 1000, userId: data.user?.id || meta.userId, email: data.user?.email || email, sessionExpired: false });
   saveMeta();
 }
+// Tell Supabase where to send the person after they click the confirmation link.
+// Without this it uses the project's Site URL (default http://localhost:3000), which is often the wrong place.
+// The address must also be listed under Supabase -> Authentication -> URL Configuration -> Redirect URLs.
+// Skipped inside the Android app (its address is not a public URL); there the Site URL is used.
+function confirmRedirectQuery() {
+  if (window.Capacitor || !/^https?:$/.test(location.protocol)) return '';
+  return `?redirect_to=${encodeURIComponent(location.origin + location.pathname)}`;
+}
 const unreachable = () => new Error('Could not reach Supabase. Check your internet connection and the project URL.');
 export async function signIn({ url, anonKey, email, password }) {
   meta.url = cleanUrl(url); meta.anonKey = checkKey(anonKey); saveMeta();
   if (!email || !password) throw new Error('Enter your email and password.');
-  const data = await http('/auth/v1/token?grant_type=password', { method: 'POST', auth: false, body: { email: email.trim(), password } }).catch(error => { throw isNetworkError(error) ? unreachable() : error; });
+  const data = await http('/auth/v1/token?grant_type=password', { method: 'POST', auth: false, body: { email: email.trim(), password } }).catch(error => { if (isNetworkError(error)) throw unreachable(); if (/email not confirmed/i.test(error.message)) throw new Error('Email not confirmed yet. Open the newest confirmation email and click its link once. If that already failed, check Supabase -> Authentication -> Users, or turn off Confirm email.'); throw error; });
   adoptSession(data, email.trim()); idleStatus(); schedule(300); return true;
 }
 export async function signUp({ url, anonKey, email, password }) {
   meta.url = cleanUrl(url); meta.anonKey = checkKey(anonKey); saveMeta();
   if (!email || !password) throw new Error('Enter an email and a password (at least 6 characters).');
-  const data = await http('/auth/v1/signup', { method: 'POST', auth: false, body: { email: email.trim(), password } }).catch(error => { throw isNetworkError(error) ? unreachable() : error; });
+  const data = await http(`/auth/v1/signup${confirmRedirectQuery()}`, { method: 'POST', auth: false, body: { email: email.trim(), password } }).catch(error => { throw isNetworkError(error) ? unreachable() : error; });
   if (data?.access_token) { adoptSession(data, email.trim()); idleStatus(); schedule(300); return { signedIn: true }; }
   return { signedIn: false };
 }
