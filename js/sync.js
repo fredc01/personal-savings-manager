@@ -2,8 +2,10 @@
 // The local ledger (IndexedDB) is always the working copy. The cloud holds one snapshot per user.
 // Changes are never merged silently: if both sides changed, the person chooses which copy wins.
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
+import { mergeLedgers } from './merge.js';
 
 const META_KEY = 'savings-manager-sync';
+const BASE_KEY = 'savings-manager-sync-base';
 const TABLE = 'ledgers';
 const AUTO_INTERVAL_MS = 120000;
 const DEBOUNCE_MS = 2500;
@@ -26,6 +28,12 @@ export function fingerprint(s) {
 }
 const isPristine = s => !s.transactions.length && !s.plans.length && s.wallet.balanceCents === 0;
 const corePayload = s => ({ version: 1, wallet: s.wallet, branches: s.branches, transactions: s.transactions, activities: s.activities, presets: s.presets, plans: s.plans });
+
+// The base is a copy of the ledger as of the last successful sync. It is what lets two devices that both
+// changed be combined (see merge.js) instead of one overwriting the other.
+function saveBase(data) { try { localStorage.setItem(BASE_KEY, JSON.stringify({ userId: meta.userId, data: corePayload(data) })); } catch { /* storage full: merging falls back to asking */ } }
+function loadBase() { try { const saved = JSON.parse(localStorage.getItem(BASE_KEY) || 'null'); return saved && saved.userId === meta.userId ? saved.data : null; } catch { return null; } }
+function clearBase() { try { localStorage.removeItem(BASE_KEY); } catch { /* ignore */ } }
 
 export const getConfig = () => ({ url: meta.url || SUPABASE_URL || '', anonKey: meta.anonKey || SUPABASE_ANON_KEY || '' });
 export const isSignedIn = () => !!(meta.refreshToken && meta.userId);
@@ -86,7 +94,7 @@ export async function signIn({ url, anonKey, email, password }) {
   // A fresh sign-in forgets the old sync baseline. Otherwise an empty ledger (e.g. after "Erase all data" while
   // signed out) looks like a deliberate edit and silently overwrites the cloud copy. With no baseline, an empty
   // device pulls the cloud copy, and a device with different data asks which copy to keep.
-  Object.assign(meta, { baseRevision: null, syncedFp: null });
+  Object.assign(meta, { baseRevision: null, syncedFp: null }); clearBase();
   adoptSession(data, email.trim()); idleStatus(); schedule(300); return true;
 }
 export async function signUp({ url, anonKey, email, password }) {
@@ -99,7 +107,7 @@ export async function signUp({ url, anonKey, email, password }) {
 export async function signOut() {
   // Push any unsynced changes first so nothing is lost when the person signs out and later erases the device.
   try { if (isSignedIn() && api && !running && !conflictPending && navigator.onLine && fingerprint(api.getState()) !== meta.syncedFp) await syncNow(); } catch { /* sign out anyway */ }
-  Object.assign(meta, { accessToken: null, refreshToken: null, expiresAt: 0, sessionExpired: false }); saveMeta(); clearTimeout(timer); idleStatus();
+  Object.assign(meta, { accessToken: null, refreshToken: null, expiresAt: 0, sessionExpired: false }); saveMeta(); clearBase(); clearTimeout(timer); idleStatus();
 }
 export function setAutoSync(on) { meta.autoSync = !!on; saveMeta(); if (on) schedule(300); else idleStatus(); }
 async function ensureToken() {
@@ -118,8 +126,8 @@ async function fetchRemote() {
   const rows = await http(`/rest/v1/${TABLE}?select=data,revision&user_id=eq.${meta.userId}`);
   return rows?.[0] || null;
 }
-async function pushLocal(expectedRevision) {
-  const snapshot = api.getState(); const fp = fingerprint(snapshot); const data = corePayload(snapshot);
+async function pushLocal(expectedRevision, snapshot = api.getState()) {
+  const fp = fingerprint(snapshot); const data = corePayload(snapshot);
   let rows;
   if (expectedRevision === null) {
     try { rows = await http(`/rest/v1/${TABLE}`, { method: 'POST', headers: { Prefer: 'return=representation' }, body: { user_id: meta.userId, data, revision: 1 } }); } catch (error) { if (error.status === 409) return { conflict: true }; throw error; }
@@ -127,16 +135,40 @@ async function pushLocal(expectedRevision) {
     rows = await http(`/rest/v1/${TABLE}?user_id=eq.${meta.userId}&revision=eq.${expectedRevision}`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: { data, revision: expectedRevision + 1, updated_at: new Date().toISOString() } });
   }
   if (!rows?.length) return { conflict: true };
-  Object.assign(meta, { baseRevision: rows[0].revision, syncedFp: fp, lastSyncAt: new Date().toISOString() }); saveMeta();
+  Object.assign(meta, { baseRevision: rows[0].revision, syncedFp: fp, lastSyncAt: new Date().toISOString() }); saveMeta(); saveBase(snapshot);
   return { pushed: true };
 }
 async function pullRemote(remote) {
   const next = { ...remote.data, settings: api.getState().settings };
   api.validate(next);
   await api.applyRemote(next);
-  Object.assign(meta, { baseRevision: remote.revision, syncedFp: fingerprint(api.getState()), lastSyncAt: new Date().toISOString() }); saveMeta();
+  Object.assign(meta, { baseRevision: remote.revision, syncedFp: fingerprint(api.getState()), lastSyncAt: new Date().toISOString() }); saveMeta(); saveBase(api.getState());
   api.onRemoteApplied?.();
   return { pulled: true };
+}
+
+// Both this device and the cloud changed: combine them instead of asking which one to throw away.
+// Returns null when it cannot be done safely (no saved base, or the result is invalid); the person is then asked.
+async function autoMerge(remote) {
+  const base = loadBase(); if (!base) return null;
+  let current = remote;
+  for (let attempt = 0; attempt < 3 && current; attempt += 1) {
+    const local = api.getState(); const fpBefore = fingerprint(local);
+    if (isPristine(local) && !isPristine(base)) return null; // the ledger was erased on purpose; do not guess
+    const start = JSON.parse(JSON.stringify(corePayload(local)));
+    let merged;
+    try { merged = { ...mergeLedgers(base, start, current.data), settings: local.settings }; api.validate(merged); } catch { return null; }
+    if (fingerprint(api.getState()) !== fpBefore) return { skipped: 'changed' }; // edited while merging; the next round retries
+    const outcome = await pushLocal(current.revision, merged);
+    if (outcome.conflict) { current = await fetchRemote(); continue; } // the cloud changed again; merge once more
+    // If something was recorded on this device while the push was in flight, fold it into the merged copy too.
+    const now = api.getState();
+    const final = fingerprint(now) === fpBefore ? merged : { ...mergeLedgers(start, corePayload(now), merged), settings: now.settings };
+    await api.applyRemote(final);
+    api.onRemoteApplied?.();
+    return { merged: true };
+  }
+  return null;
 }
 
 // ---------- The sync round ----------
@@ -152,10 +184,10 @@ export async function syncNow({ manual = false } = {}) {
     const remote = await fetchRemote(); const local = api.getState(); const fp = fingerprint(local); const dirty = fp !== meta.syncedFp;
     let result;
     if (!remote) { result = await pushLocal(null); }
-    else if (meta.baseRevision === remote.revision) { result = dirty ? await pushLocal(remote.revision) : { upToDate: true }; }
-    else if (fingerprint(remote.data) === fp) { Object.assign(meta, { baseRevision: remote.revision, syncedFp: fp, lastSyncAt: new Date().toISOString() }); saveMeta(); result = { upToDate: true }; }
+    else if (meta.baseRevision === remote.revision) { result = dirty ? await pushLocal(remote.revision) : { upToDate: true }; if (result.upToDate && !loadBase()) saveBase(local); }
+    else if (fingerprint(remote.data) === fp) { Object.assign(meta, { baseRevision: remote.revision, syncedFp: fp, lastSyncAt: new Date().toISOString() }); saveMeta(); saveBase(local); result = { upToDate: true }; }
     else if (isPristine(local) || (meta.baseRevision !== null && !dirty)) { result = await pullRemote(remote); }
-    else { result = { conflict: true, remote }; }
+    else { result = (await autoMerge(remote)) || { conflict: true, remote }; }
     if (result.conflict) {
       const latest = result.remote || await fetchRemote();
       conflictPending = true; setStatus('conflict', 'This device and the cloud both have changes. Choose which to keep.');
