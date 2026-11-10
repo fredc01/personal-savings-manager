@@ -263,7 +263,7 @@ async function handleAction(action, target) {
       return;
     }
     if (action === 'cloud-signup') { const form = document.querySelector('#cloud-form'); if (!form.reportValidity()) return; const outcome = await Sync.signUp(Object.fromEntries(new FormData(form))); renderPage(); toast(outcome.signedIn ? 'Account created. Syncing…' : 'Account created. Check your email to confirm it, then sign in.', outcome.signedIn ? 'success' : 'info'); return; }
-    if (action === 'cloud-signout') { if (!window.confirm('Sign out of cloud sync? Your data stays on this device.')) return; Sync.signOut(); renderPage(); toast('Signed out. Your ledger stays on this device.', 'info'); return; }
+    if (action === 'cloud-signout') { if (!window.confirm('Sign out of cloud sync? Your data stays on this device.')) return; await Sync.signOut(); renderPage(); toast('Signed out. Your ledger stays on this device.', 'info'); return; }
     if (action === 'toggle-autosync') { Sync.setAutoSync(!Sync.getStatus().autoSync); renderPage(); return; }
     if (action === 'accept-confirm' || action === 'reject-confirm') { const resolve = pendingConfirm; pendingConfirm = null; closeModal(); resolve?.(action === 'accept-confirm'); return; }
     if (action === 'toggle-sidebar') return document.querySelector('#sidebar').classList.toggle('open');

@@ -83,6 +83,10 @@ export async function signIn({ url, anonKey, email, password }) {
   meta.url = cleanUrl(url); meta.anonKey = checkKey(anonKey); saveMeta();
   if (!email || !password) throw new Error('Enter your email and password.');
   const data = await http('/auth/v1/token?grant_type=password', { method: 'POST', auth: false, body: { email: email.trim(), password } }).catch(error => { if (isNetworkError(error)) throw unreachable(); if (/email not confirmed/i.test(error.message)) throw new Error('Email not confirmed yet. Open the newest confirmation email and click its link once. If that already failed, check Supabase -> Authentication -> Users, or turn off Confirm email.'); throw error; });
+  // A fresh sign-in forgets the old sync baseline. Otherwise an empty ledger (e.g. after "Erase all data" while
+  // signed out) looks like a deliberate edit and silently overwrites the cloud copy. With no baseline, an empty
+  // device pulls the cloud copy, and a device with different data asks which copy to keep.
+  Object.assign(meta, { baseRevision: null, syncedFp: null });
   adoptSession(data, email.trim()); idleStatus(); schedule(300); return true;
 }
 export async function signUp({ url, anonKey, email, password }) {
@@ -92,7 +96,9 @@ export async function signUp({ url, anonKey, email, password }) {
   if (data?.access_token) { adoptSession(data, email.trim()); idleStatus(); schedule(300); return { signedIn: true }; }
   return { signedIn: false };
 }
-export function signOut() {
+export async function signOut() {
+  // Push any unsynced changes first so nothing is lost when the person signs out and later erases the device.
+  try { if (isSignedIn() && api && !running && !conflictPending && navigator.onLine && fingerprint(api.getState()) !== meta.syncedFp) await syncNow(); } catch { /* sign out anyway */ }
   Object.assign(meta, { accessToken: null, refreshToken: null, expiresAt: 0, sessionExpired: false }); saveMeta(); clearTimeout(timer); idleStatus();
 }
 export function setAutoSync(on) { meta.autoSync = !!on; saveMeta(); if (on) schedule(300); else idleStatus(); }
