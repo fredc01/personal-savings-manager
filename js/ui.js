@@ -62,8 +62,7 @@ export function donutChart(items, total) {
 
 export function openModal({ title, eyebrow = 'Action', body, submitLabel = 'Save', formId = '', wide = false }) {
   const root = document.querySelector('#modal-root');
-  root.innerHTML = `<div class="modal-backdrop" data-action="close-modal"><section class="modal ${wide ? 'modal-wide' : ''}" role="dialog" aria-modal="true" aria-label="${escapeHTML(title)}" data-modal-card><button class="icon-button modal-close" data-action="close-modal" aria-label="Close">${icon('close')}</button><div class="eyebrow">${escapeHTML(eyebrow)}</div><h2>${escapeHTML(title)}</h2>${formId ? `<form id="${formId}">${body}<div class="modal-actions"><button type="button" class="button button-ghost" data-action="close-modal">Cancel</button><button type="submit" class="button button-primary">${escapeHTML(submitLabel)} ${icon('arrow', 16)}</button></div></form>` : body}</section></div>`;
-  root.querySelector('[data-modal-card]').addEventListener('click', (event) => event.stopPropagation());
+  root.innerHTML = `<div class="modal-backdrop" data-backdrop-close><section class="modal ${wide ? 'modal-wide' : ''}" role="dialog" aria-modal="true" aria-label="${escapeHTML(title)}" data-modal-card><button class="icon-button modal-close" data-action="close-modal" aria-label="Close">${icon('close')}</button><div class="eyebrow">${escapeHTML(eyebrow)}</div><h2>${escapeHTML(title)}</h2>${formId ? `<form id="${formId}">${body}<div class="modal-actions"><button type="button" class="button button-ghost" data-action="close-modal">Cancel</button><button type="submit" class="button button-primary">${escapeHTML(submitLabel)} ${icon('arrow', 16)}</button></div></form>` : body}</section></div>`;
   root.querySelector('[data-modal-card] input, [data-modal-card] select, [data-modal-card] textarea')?.focus();
 }
 
