@@ -35,7 +35,10 @@ function saveBase(data) { try { localStorage.setItem(BASE_KEY, JSON.stringify({ 
 function loadBase() { try { const saved = JSON.parse(localStorage.getItem(BASE_KEY) || 'null'); return saved && saved.userId === meta.userId ? saved.data : null; } catch { return null; } }
 function clearBase() { try { localStorage.removeItem(BASE_KEY); } catch { /* ignore */ } }
 
-export const getConfig = () => ({ url: meta.url || SUPABASE_URL || '', anonKey: meta.anonKey || SUPABASE_ANON_KEY || '' });
+// True when js/config.js already holds the project URL and public key, so the app never has to ask for them.
+export const hasBuiltInConfig = !!(SUPABASE_URL && SUPABASE_ANON_KEY);
+// The built-in values (js/config.js) always win over anything an older version saved in this browser.
+export const getConfig = () => ({ url: SUPABASE_URL || meta.url || '', anonKey: SUPABASE_ANON_KEY || meta.anonKey || '' });
 export const isSignedIn = () => !!(meta.refreshToken && meta.userId);
 export function getStatus() { return { ...status, signedIn: isSignedIn(), email: meta.email || '', autoSync: meta.autoSync !== false, lastSyncAt: meta.lastSyncAt || null, configured: !!(getConfig().url && getConfig().anonKey) }; }
 export function subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); }
