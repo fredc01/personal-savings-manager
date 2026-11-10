@@ -1,0 +1,16 @@
+{
+  "routes": [
+    { "path": "/", "title": "Dashboard" },
+    { "path": "/wallet", "title": "Main Wallet" },
+    { "path": "/branches", "title": "Branch Accounts" },
+    { "path": "/deposit", "title": "Deposit Money" },
+    { "path": "/transfer", "title": "Transfer Money" },
+    { "path": "/withdraw", "title": "Withdraw Money" },
+    { "path": "/allocation", "title": "Allocation Settings" },
+    { "path": "/goals", "title": "Savings Goals" },
+    { "path": "/transactions", "title": "Transaction History" },
+    { "path": "/reports", "title": "Reports & Analytics" },
+    { "path": "/planner", "title": "Recurring Planner" },
+    { "path": "/settings", "title": "Settings & Backup" }
+  ]
+}

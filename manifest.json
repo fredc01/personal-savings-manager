@@ -1,0 +1,13 @@
+{
+  "name": "Personal Savings Manager",
+  "short_name": "Savings",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f7fb",
+  "theme_color": "#13233f",
+  "description": "Give every peso a place to go.",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

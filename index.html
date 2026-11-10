@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#13233f" />
+  <meta name="description" content="Personal Savings Manager — give every peso a place to go." />
+  <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="stylesheet" href="./css/style.css" />
+  <title>Personal Savings Manager</title>
+</head>
+<body>
+  <div id="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand"><span class="brand-mark">S<span></span></span><span class="brand-copy"><strong>Savings</strong><small>personal manager</small></span></div>
+      <div class="rail-label">Your money map</div>
+      <nav class="nav-group" aria-label="Primary navigation">
+        <a href="#/" data-route="/" class="nav-item"><span class="nav-icon" data-icon="dashboard"></span><span>Overview</span></a>
+        <a href="#/wallet" data-route="/wallet" class="nav-item"><span class="nav-icon" data-icon="wallet"></span><span>Main wallet</span></a>
+        <a href="#/branches" data-route="/branches" class="nav-item"><span class="nav-icon" data-icon="branches"></span><span>Branch accounts</span></a>
+        <div class="rail-label rail-label-spaced">Move money</div>
+        <a href="#/deposit" data-route="/deposit" class="nav-item"><span class="nav-icon" data-icon="deposit"></span><span>Deposit money</span></a>
+        <a href="#/transfer" data-route="/transfer" class="nav-item"><span class="nav-icon" data-icon="transfer"></span><span>Transfer money</span></a>
+        <a href="#/withdraw" data-route="/withdraw" class="nav-item"><span class="nav-icon" data-icon="withdraw"></span><span>Withdraw money</span></a>
+      </nav>
+      <div class="sidebar-bottom">
+        <a href="#/reports" data-route="/reports" class="nav-item"><span class="nav-icon" data-icon="chart"></span><span>Reports & analytics</span></a>
+        <a href="#/settings" data-route="/settings" class="nav-item"><span class="nav-icon" data-icon="settings"></span><span>Settings & backup</span></a>
+        <div class="sidebar-note"><span class="status-dot"></span><span><strong>Local ledger</strong><small>Saved on this device</small></span></div>
+      </div>
+    </aside>
+    <div class="main-area">
+      <header class="topbar">
+        <div class="mobile-brand"><button class="icon-button" data-action="toggle-sidebar" aria-label="Open menu"><span data-icon="menu"></span></button><span class="brand-mark">S<span></span></span><strong>Savings</strong></div>
+        <div class="breadcrumb"><span id="page-eyebrow">Overview</span><span class="breadcrumb-slash">/</span><strong id="page-title">Dashboard</strong></div>
+        <div class="topbar-actions"><button class="icon-button" data-action="toggle-theme" aria-label="Toggle theme"><span data-icon="moon"></span></button><button class="avatar" data-action="open-profile" aria-label="Open profile">JD</button></div>
+      </header>
+      <main id="content" tabindex="-1"></main>
+      <nav class="mobile-nav" aria-label="Mobile navigation">
+        <a href="#/" data-route="/"><span data-icon="dashboard"></span><small>Home</small></a>
+        <a href="#/branches" data-route="/branches"><span data-icon="branches"></span><small>Branches</small></a>
+        <a href="#/deposit" data-route="/deposit" class="mobile-nav-primary"><span data-icon="plus"></span><small>Add</small></a>
+        <a href="#/transactions" data-route="/transactions"><span data-icon="list"></span><small>Activity</small></a>
+        <a href="#/settings" data-route="/settings"><span data-icon="more"></span><small>More</small></a>
+      </nav>
+    </div>
+  </div>
+  <div id="modal-root"></div><div id="toast-root" aria-live="polite"></div>
+  <script type="module" src="./js/app.js"></script>
+  <script>if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js').catch(() => {}));</script>
+</body>
+</html>

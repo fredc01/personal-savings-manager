@@ -1,0 +1,20 @@
+{
+  "name": "savings-manager-android",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "sync:web": "node scripts/sync-web.mjs",
+    "cap:sync": "npm run sync:web && npx cap sync android",
+    "android:add": "npm run sync:web && npx cap add android",
+    "android:open": "npx cap open android",
+    "android:build": "npm run cap:sync && cd android && ./gradlew assembleDebug"
+  },
+  "dependencies": {
+    "@capacitor/app": "^8.0.0",
+    "@capacitor/android": "^8.0.0",
+    "@capacitor/core": "^8.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^8.0.0"
+  }
+}

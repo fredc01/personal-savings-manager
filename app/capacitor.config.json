@@ -1,0 +1,8 @@
+{
+  "appId": "com.personal.savingsmanager",
+  "appName": "Savings Manager",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  }
+}
