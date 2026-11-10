@@ -1,5 +1,5 @@
-const CACHE = 'savings-manager-v4';
-const ASSETS = ['./', './index.html', './css/style.css', './js/app.js', './js/db.js', './js/finance.js', './js/ui.js', './js/utils.js', './js/sync.js', './js/config.js', './manifest.json', './icon.svg'];
+const CACHE = 'savings-manager-v5';
+const ASSETS = ['./', './index.html', './css/style.css', './js/app.js', './js/db.js', './js/finance.js', './js/ui.js', './js/utils.js', './js/sync.js', './js/merge.js', './js/config.js', './manifest.json', './icon.svg'];
 self.addEventListener('install', event => { self.skipWaiting(); event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS))); });
 self.addEventListener('activate', event => event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key)))).then(() => self.clients.claim())));
 // Network-first for this app's own files so new deployments are picked up; cache is the offline fallback.
